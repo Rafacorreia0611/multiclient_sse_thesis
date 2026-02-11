@@ -6,3 +6,9 @@
  */
 
 rootProject.name = "multiclient_sse_thesis"
+
+include("sse")
+
+include("demo:client")
+
+include("demo:server")
