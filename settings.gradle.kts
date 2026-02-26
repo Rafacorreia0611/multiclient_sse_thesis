@@ -12,3 +12,5 @@ include("sse")
 include("demo:client")
 
 include("demo:server")
+
+include("demo:common")

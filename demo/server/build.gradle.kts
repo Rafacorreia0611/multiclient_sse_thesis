@@ -14,6 +14,7 @@ java {
 
 dependencies {
     implementation(project(":sse"))
+    implementation(project(":demo:common"))
 }
 
 application {
