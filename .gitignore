@@ -9,3 +9,6 @@ build
 
 # Ignore VS Code settings folder
 .vscode/
+
+# Ignore Bin directory
+bin
