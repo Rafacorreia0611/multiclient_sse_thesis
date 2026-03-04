@@ -44,11 +44,24 @@ public class SseServer {
             searchCounter.put(token_w, 0);
             nextSearchIndex.put(token_w, 1);
         }
+        List <UpdateTuple> ret = new LinkedList<>();
+        // Retrive the updates, where the address is keeped in the cache, and add them to the result list
+        List<String> cachedAddresses = dbCache.getOrDefault(token_w, new LinkedList<>());
+        if (!cachedAddresses.isEmpty()) {
+            for (String address : cachedAddresses) {
+                UpdateTuple update = invertedIndex.get(address);
+                if (update != null) {
+                    ret.add(update);
+                }
+            }
+        }
+        if (searchToken.searchCounter() != searchCounter.get(token_w)) {
+            return ret;
+        }
         // Iterate over from the nextSearchIndex to the current updateCounter
         byte[] tokenWsBytes = Base64.getDecoder().decode(token_ws);
         int currentUpdateCounter = updateCounter.getOrDefault(token_w, 0);
         int nextIndex = nextSearchIndex.get(token_w);
-        List<UpdateTuple> updates = new LinkedList<>();
         List<String> newAddresses = new LinkedList<>();
         for (int i = nextIndex; i <= currentUpdateCounter; i++) {
             // Get the address of the i-th update for token_ws from the inverted index
@@ -56,18 +69,8 @@ public class SseServer {
             String addressBase64 = Base64.getEncoder().encodeToString(address);
             UpdateTuple update = invertedIndex.get(addressBase64);
             if (update != null) {
-                updates.add(update);
+                ret.add(update);
                 newAddresses.add(addressBase64);
-            }
-        }
-        // Retrive the updates, where the address is keeped in the cache, and add them to the result list
-        List<String> cachedAddresses = dbCache.getOrDefault(token_w, new LinkedList<>());
-        if (!cachedAddresses.isEmpty()) {
-            for (String address : cachedAddresses) {
-                UpdateTuple update = invertedIndex.get(address);
-                if (update != null) {
-                    updates.add(update);
-                }
             }
         }
         // Update the nextSearchIndex to the current updateCounter + 1
@@ -78,7 +81,7 @@ public class SseServer {
         // Update the search counter for the token_w
         searchCounter.put(token_w, searchCounter.get(token_w) + 1);
         // Return the list of updates
-        return updates;
+        return ret;
     }
 
     public void updateQuery(UpdateToken updateToken) {
@@ -97,12 +100,15 @@ public class SseServer {
 
     }
 
-    public State getStateSearchToken() {
-        return new State(searchCounter);
-    }
-
-    public State getStateUpdateToken() {
-        return new State(searchCounter, updateCounter);
+    public State getState(String op) {
+        if (op == null || (!op.equalsIgnoreCase("search") && !op.equalsIgnoreCase("update"))) {
+            throw new IllegalArgumentException("Operation must be either 'search' or 'update'");
+        }
+        if (op.equalsIgnoreCase("search")) {
+            return new State(searchCounter);
+        } else {
+            return new State(searchCounter, updateCounter);
+        }
     }
 
     public SecretKey getTokenGenKey() {

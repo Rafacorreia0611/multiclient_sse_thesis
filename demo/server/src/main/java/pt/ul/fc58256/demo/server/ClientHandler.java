@@ -106,7 +106,7 @@ public class ClientHandler implements Runnable {
     }
 
     private void handleSearch() {
-        State searchState = sseServer.getStateSearchToken();
+        State searchState = sseServer.getState("search");
         send(searchState);
         send(sseServer.getTokenGenKey());
 
@@ -120,7 +120,7 @@ public class ClientHandler implements Runnable {
     }
 
     private void handleUpdate() {
-        State updateState = sseServer.getStateUpdateToken();
+        State updateState = sseServer.getState("update");
         send(updateState);
         send(sseServer.getTokenGenKey());
 

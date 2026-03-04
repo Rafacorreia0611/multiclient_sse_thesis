@@ -31,7 +31,7 @@ public class SseClient {
         byte[] token_ws_bytes = Prf.prf(tokenGenKey, keyword + ":" + searchCount);
         String token_ws = Base64.getEncoder().encodeToString(token_ws_bytes);
 
-        return new SearchToken(token_ws, token_w);
+        return new SearchToken(token_ws, token_w, searchCount);
     }
 
     public static UpdateToken generateUpdateToken(SecretKey tokenGenKey, State state, String keyword, String docId, UpdateOp op, int retryOffset) {
