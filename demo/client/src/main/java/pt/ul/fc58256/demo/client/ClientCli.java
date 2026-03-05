@@ -136,7 +136,17 @@ public class ClientCli {
     private void sendUpdateToken(SecretKey tokenGenKey, State state, String keyword, String docId, UpdateOp op) {
         int retryOffset = 0;
         while (true) {
-            UpdateToken updateToken = SseClient.generateUpdateToken(tokenGenKey, state, keyword, docId, op, retryOffset);
+            UpdateToken updateToken;
+            try{
+                updateToken = SseClient.generateUpdateToken(tokenGenKey, state, keyword, docId, op, retryOffset);
+            } catch (IllegalArgumentException e) {
+                System.out.println("Error generating update token: " + e.getMessage());
+                return;
+            }
+            if (updateToken == null) {
+                System.out.println("Failed to generate update token. Please try again.");
+                return;
+            }
             conn.send(updateToken);
             UpdateStatus status = conn.readExpected(UpdateStatus.class);
             if (status == UpdateStatus.OK) {

@@ -36,6 +36,10 @@ public class SseClient {
 
     public static UpdateToken generateUpdateToken(SecretKey tokenGenKey, State state, String keyword, String docId, UpdateOp op, int retryOffset) {
 
+        if (keyword == null || keyword.isEmpty() || docId == null || docId.isEmpty() || op == null) {
+             throw new IllegalArgumentException("keyword, docId and op cannot be null or empty");
+        }
+
         byte[] token_w_bytes = Prf.prf(tokenGenKey, keyword);
         String token_w = Base64.getEncoder().encodeToString(token_w_bytes);
 
