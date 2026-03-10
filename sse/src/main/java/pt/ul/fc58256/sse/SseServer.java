@@ -2,18 +2,19 @@ package pt.ul.fc58256.sse;
 
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 
 import pt.ul.fc58256.sse.crypto.Prf;
-import pt.ul.fc58256.sse.crypto.SseKeys;
+import pt.ul.fc58256.sse.model.EncryptedUpdateTuple;
 import pt.ul.fc58256.sse.model.SearchToken;
 import pt.ul.fc58256.sse.model.State;
 import pt.ul.fc58256.sse.model.UpdateToken;
-import pt.ul.fc58256.sse.model.UpdateTuple;
 
 public class SseServer {
     
@@ -21,8 +22,9 @@ public class SseServer {
     private Map<String, Integer> updateCounter;
     private Map<String, List<String>> dbCache;
     private Map<String, Integer> nextSearchIndex;
-    private Map<String, UpdateTuple> invertedIndex;
-    private SseKeys keys;
+    private Map<String, EncryptedUpdateTuple> invertedIndex;
+    private Map<String, SecretKey> updateTupleKeys;
+    private final SecretKey tokenGenKey;
 
     public SseServer() {
         this.searchCounter = new HashMap<>();
@@ -30,11 +32,12 @@ public class SseServer {
         this.dbCache = new HashMap<>();
         this.nextSearchIndex = new HashMap<>();
         this.invertedIndex = new HashMap<>();
-        this.keys = new SseKeys();
+        this.updateTupleKeys = new HashMap<>();
+        this.tokenGenKey = generateRandomHmacKey();
     }
 
     // token_ws and token_w are Base64 encoded strings
-    public List<UpdateTuple> searchQuery(SearchToken searchToken) {
+    public Map<EncryptedUpdateTuple, SecretKey> searchQuery(SearchToken searchToken) {
 
         String token_ws = searchToken.token_ws();
         String token_w = searchToken.token_w();
@@ -44,14 +47,15 @@ public class SseServer {
             searchCounter.put(token_w, 0);
             nextSearchIndex.put(token_w, 1);
         }
-        List <UpdateTuple> ret = new LinkedList<>();
+        Map<EncryptedUpdateTuple, SecretKey> ret = new LinkedHashMap<>();
         // Retrive the updates, where the address is keeped in the cache, and add them to the result list
         List<String> cachedAddresses = dbCache.getOrDefault(token_w, new LinkedList<>());
         if (!cachedAddresses.isEmpty()) {
             for (String address : cachedAddresses) {
-                UpdateTuple update = invertedIndex.get(address);
+                EncryptedUpdateTuple update = invertedIndex.get(address);
+                SecretKey updateTupleKey = updateTupleKeys.get(address);
                 if (update != null) {
-                    ret.add(update);
+                    ret.put(update, updateTupleKey);
                 }
             }
         }
@@ -67,9 +71,10 @@ public class SseServer {
             // Get the address of the i-th update for token_ws from the inverted index
             byte[] address = Prf.prf(tokenWsBytes, Integer.toString(i));
             String addressBase64 = Base64.getEncoder().encodeToString(address);
-            UpdateTuple update = invertedIndex.get(addressBase64);
+            EncryptedUpdateTuple update = invertedIndex.get(addressBase64);
             if (update != null) {
-                ret.add(update);
+                SecretKey updateTupleKey = updateTupleKeys.get(addressBase64);
+                ret.put(update, updateTupleKey);
                 newAddresses.add(addressBase64);
             }
         }
@@ -84,17 +89,18 @@ public class SseServer {
         return ret;
     }
 
-    public void updateQuery(UpdateToken updateToken) {
+    public void updateQuery(UpdateToken updateToken, SecretKey updateTupleKey) {
 
         String address = updateToken.address();
-        UpdateTuple update = updateToken.updateTuple();
+        EncryptedUpdateTuple encryptedTuple = updateToken.encryptedTuple();
         String token_w = updateToken.token_w();
         
         // Update the inverted index with the new update
         if (invertedIndex.containsKey(address)) {
             throw new IllegalArgumentException("Address already exists in the inverted index");
         }
-        invertedIndex.put(address, update);
+        invertedIndex.put(address, encryptedTuple);
+        updateTupleKeys.put(address, updateTupleKey);
         // Update the update counter for the token_w
         this.updateCounter.put(token_w, this.updateCounter.getOrDefault(token_w, 0) + 1);
 
@@ -112,6 +118,17 @@ public class SseServer {
     }
 
     public SecretKey getTokenGenKey() {
-        return keys.getTokenGenKey();
+        return tokenGenKey;
+    }
+
+    private static SecretKey generateRandomHmacKey() {
+        KeyGenerator keyGen = null;
+        try {
+            keyGen = KeyGenerator.getInstance("HmacSHA256");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("HmacSHA256 not available in this JVM/provider", e);
+        }
+        keyGen.init(256);
+        return keyGen.generateKey();
     }
 }

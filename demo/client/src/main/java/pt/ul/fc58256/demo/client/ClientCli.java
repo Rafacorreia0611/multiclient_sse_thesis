@@ -4,12 +4,14 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.List;
+import java.util.Map;
 
 import javax.crypto.SecretKey;
 
 import pt.ul.fc58256.demo.common.RequestType;
 import pt.ul.fc58256.demo.common.UpdateStatus;
 import pt.ul.fc58256.sse.SseClient;
+import pt.ul.fc58256.sse.model.EncryptedUpdateTuple;
 import pt.ul.fc58256.sse.model.SearchToken;
 import pt.ul.fc58256.sse.model.State;
 import pt.ul.fc58256.sse.model.UpdateOp;
@@ -92,7 +94,7 @@ public class ClientCli {
         SearchToken token = SseClient.generateSearchToken(tokenGenKey, state, keyword);
         conn.send(token);
 
-        List<UpdateTuple> results = conn.readUpdateTupleList();
+        Map<EncryptedUpdateTuple, SecretKey> results = conn.readEncryptedUpdateTupleMap();
         List<String> docIds = SseClient.extractAddedDocIds(results);
         System.out.println("Matching docIds: " + docIds);
 
@@ -135,10 +137,18 @@ public class ClientCli {
 
     private void sendUpdateToken(SecretKey tokenGenKey, State state, String keyword, String docId, UpdateOp op) {
         int retryOffset = 0;
-        while (true) {
+        SecretKey updateTupleKey = SseClient.generateTupleSecretKey();
+        byte[] iv = SseClient.generateTupleIv();
+        EncryptedUpdateTuple encryptedTuple = null;
+        try {
+            encryptedTuple = SseClient.encryptUpdateTuple(updateTupleKey, iv, new UpdateTuple(docId, op));
+        } catch (Exception e) {
+            throw new RuntimeException("Error encrypting update tuple", e);
+        }
+        while (true && encryptedTuple != null) {
             UpdateToken updateToken;
             try{
-                updateToken = SseClient.generateUpdateToken(tokenGenKey, state, keyword, docId, op, retryOffset);
+                updateToken = SseClient.generateUpdateToken(tokenGenKey, state, keyword, encryptedTuple, retryOffset);
             } catch (IllegalArgumentException e) {
                 System.out.println("Error generating update token: " + e.getMessage());
                 return;
@@ -148,6 +158,7 @@ public class ClientCli {
                 return;
             }
             conn.send(updateToken);
+            conn.send(updateTupleKey);
             UpdateStatus status = conn.readExpected(UpdateStatus.class);
             if (status == UpdateStatus.OK) {
                 System.out.println("Update successful.");

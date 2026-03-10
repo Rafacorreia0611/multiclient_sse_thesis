@@ -4,10 +4,12 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-import pt.ul.fc58256.sse.model.UpdateTuple;
+import javax.crypto.SecretKey;
+
+import pt.ul.fc58256.sse.model.EncryptedUpdateTuple;
 
 public class ServerConnection implements AutoCloseable {
 
@@ -66,21 +68,25 @@ public class ServerConnection implements AutoCloseable {
         return cls.cast(o);
     }
 
-    public List<UpdateTuple> readUpdateTupleList() {
+    public Map<EncryptedUpdateTuple, javax.crypto.SecretKey> readEncryptedUpdateTupleMap() {
         Object o = read();
         if (o == null) {
             return null;
         }
-        if (!(o instanceof List<?> raw)) {
-            throw new RuntimeException("Expected List got " + o.getClass().getSimpleName());
+        if (!(o instanceof java.util.Map<?, ?> raw)) {
+            throw new RuntimeException("Expected Map got " + o.getClass().getSimpleName());
         }
 
-        List<UpdateTuple> out = new ArrayList<>(raw.size());
-        for (Object item : raw) {
-            if (!(item instanceof UpdateTuple t)) {
-                throw new RuntimeException("Expected UpdateTuple element");
+        Map<EncryptedUpdateTuple, javax.crypto.SecretKey> out =
+                new LinkedHashMap<>(raw.size());
+        for (Map.Entry<?, ?> entry : raw.entrySet()) {
+            if (!(entry.getKey() instanceof EncryptedUpdateTuple encryptedTuple)) {
+                throw new RuntimeException("Expected EncryptedUpdateTuple key");
             }
-            out.add(t);
+            if (!(entry.getValue() instanceof SecretKey secretKey)) {
+                throw new RuntimeException("Expected SecretKey value");
+            }
+            out.put(encryptedTuple, secretKey);
         }
         return out;
     }
